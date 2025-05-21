@@ -26,8 +26,8 @@ def parse_korting_page(html_code):
 
     for ul in tabs_lists:
         for li in ul.find_all('li'):
-            text = li.get_text(strip=True)
-            split_text = text.split(":", 1)
+            text = li.get_text(strip=True, separator="; ")
+            split_text = text.split(":;", 1)
             if len(split_text) == 2:
                 key, value = split_text
                 data[key.strip()] = value.strip()
