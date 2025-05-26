@@ -5,6 +5,7 @@ First, make sure that python and git is installed (https://www.python.org/ftp/py
 ```
 git clone https://github.com/ElizaLobanova/Parsing.git
 pip install urllib3 beautifulsoup4 pandas openpyxl regex tqdm 
+cd Parsing
 ```
 
 Add files example.xlsx, urls_korting.txt, urls_hausedorf.txt. You can use folder "input_example" as an example.
