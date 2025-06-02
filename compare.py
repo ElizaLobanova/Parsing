@@ -1,17 +1,10 @@
-import urllib3
-from bs4 import BeautifulSoup
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import PatternFill, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import PatternFill
-import re
-from tqdm import tqdm
-import warnings
-warnings.filterwarnings("ignore")
 import argparse
-import os
 
 # ---------------------------------------------------Остановить программу если не введено ни одного аргумента---------------------------------------------------
 # Номер строки, взятый из аргументов запуска программы
@@ -71,49 +64,44 @@ def compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame, name1: str = 'df1',
 
 resultdf_1 = pd.read_parquet(f"{args.site1}_auxiliary.parquet")
 resultdf_2 = pd.read_parquet(f"{args.site2}_auxiliary.parquet")
-common_cols = resultdf_1.columns.intersection(resultdf_2.columns)
 comp_result = compare_dataframes(resultdf_1, resultdf_2, args.site1, args.site2)
 
 # --------------------------------------------------------------Сохранить результат сравнения в excel--------------------------------------------------------------
 
 def save_comparison_to_excel(df: pd.DataFrame, filename: str):
-    # Сохранить в Excel без форматирования сначала
-    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Comparison')
-    
-    # Открыть книгу с openpyxl
-    wb = load_workbook(filename)
-    ws = wb['Comparison']
-
-    # Настройка ширины колонок
-    for col_idx, col_cells in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
-        max_length = max((len(str(cell.value)) if cell.value else 0) for cell in col_cells)
-        adjusted_width = max_length + 2
-        ws.column_dimensions[get_column_letter(col_idx)].width = adjusted_width
-
-    # Выделим разницу цветом
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    yellow_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+    wb = Workbook()
+    ws = wb.active
+
+    # Записываем DataFrame в Excel
+    for r in dataframe_to_rows(df, index=False, header=True):
+        ws.append(r)
 
     headers = [cell.value for cell in ws[1]]
-    col_indexes = {col: idx + 1 for idx, col in enumerate(headers)}
+    diff_col_index = len(headers)
+    prefix_columns = [col for col in headers if col != 'Номенклатура' and col != 'diff_columns']
 
-    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-        diff_text = row[col_indexes['diff_columns'] - 1].value
-        if diff_text:
-            differing_cols = [col.strip() for col in diff_text.split(',')]
-            for col in differing_cols:
-                # Попробуем подсветить оба варианта значений
-                for prefix in ['Korting_', 'Hausedorf_']:
-                    full_col = prefix + col
-                    if full_col in col_indexes:
-                        cell = row[col_indexes[full_col] - 1]
-                        cell.fill = yellow_fill
-            # diff_columns — красной заливкой
-            row[col_indexes['diff_columns'] - 1].fill = red_fill
+    # --- Автонастройка ширины столбцов по первой строке ---
+    for col_idx, cell in enumerate(ws[1], start=1):
+        max_length = len(str(cell.value)) if cell.value else 0
+        col_letter = cell.column_letter
+        ws.column_dimensions[col_letter].width = max_length + 2  # +2 для отступа
 
-    # Добавим автофильтр
-    ws.auto_filter.ref = ws.dimensions
+    # --- Применение стилей и переносов ---
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        diff_text = row[diff_col_index - 1].value
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical='center')  # включаем перенос текста
+
+        if isinstance(diff_text, str) and diff_text.strip():
+            different_fields = [field.strip() for field in diff_text.split(',')]
+            for diff_field in different_fields:
+                for col_idx, col_name in enumerate(headers):
+                    if col_name.endswith(f"_{diff_field}"):
+                        row[col_idx].fill = yellow_fill
+        row[diff_col_index - 1].fill = red_fill
 
     wb.save(filename)
 

@@ -1,5 +1,5 @@
 import urllib3
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl import Workbook
@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description="Парсинг данных в exc
 "для дальнейшего сравнения данных с разных сайтов")
 
 parser.add_argument("start_row", type=int, help="Номер строки в excel, начиная с которой необходимо писать данные")
-parser.add_argument("append", type=bool, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
+parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False")
 parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
@@ -32,6 +32,7 @@ parser.add_argument("output_path", type=str, help='Путь к выходном�
 args = parser.parse_args()
 if not args.output_path:
     raise ValueError("there's not enough arguments")
+args.append = True if args.append.lower() == 'true' else False
 
 # ------------------------------------------------------------------------Спарсить данные------------------------------------------------------------------------
 
@@ -53,6 +54,42 @@ def parse_korting_page(html_code):
 
     return data
 
+def extract_first_visible_text(tag):
+    for desc in tag.descendants:
+        if isinstance(desc, str):  # Это NavigableString
+            text = desc.strip()
+            if text:
+                return text
+    return None
+
+def clean_value_div(value_div):
+    # 1. Удалить все <span>
+    for span in value_div.find_all("span"):
+        span.decompose()
+
+    # 2. Разделить по <br> — создаём список на основе HTML с разделителем
+    parts = str(value_div).split('<br')
+
+    values = []
+
+    for part_html in parts:
+        # Восстанавливаем HTML-тег <br>, если он был отрезан
+        if not part_html.startswith('>'):
+            part_html = '<br' + part_html
+
+        part_soup = BeautifulSoup(part_html, 'html.parser')
+
+        # 3. Найти первый видимый текст
+        for desc in part_soup.descendants:
+            if isinstance(desc, NavigableString):
+                text = desc.strip()
+                if text:
+                    values.append(text)
+                    break  # только первое вхождение
+
+    # 4. Склеить с разделителем "; "
+    return "; ".join(values)
+
 def parse_hausedorf_page(html_code):
     soup = BeautifulSoup(html_code, 'html.parser')
     fields = soup.find_all('div', class_='detail-properties__field')
@@ -63,11 +100,11 @@ def parse_hausedorf_page(html_code):
         value_div = field.find('div', class_='detail-properties__value')
 
         if name_div and value_div:
-            raw_key = name_div.find(text=True, recursive=False)
-            value = value_div.find(text=True, recursive=False)
-            if raw_key and value:
-                key = re.sub(r'\s+', ' ', raw_key).strip()
-                data[key] = value
+            key = extract_first_visible_text(name_div)
+            value = clean_value_div(value_div)
+
+            if key and value:
+                data[re.sub(r'\s+', ' ', key).strip()] = value.replace(">\n", "")
 
     return data
 
