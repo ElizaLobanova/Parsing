@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Alignment
 import re
 from tqdm import tqdm
 import warnings
@@ -226,6 +226,17 @@ def append_dataframe_to_excel(df: pd.DataFrame, file_path: str, result_path: str
     for i, col_name in enumerate(df.columns):
         ws.cell(row=1, column=col_index + i, value=col_name)
 
+    # Автонастройка ширины столбцов по первой строке
+    for col_idx, cell in enumerate(ws[1], start=col_index):
+        max_length = len(str(cell.value)) if cell.value else 0
+        col_letter = cell.column_letter
+        ws.column_dimensions[col_letter].width = max_length + 2  # +2 для отступа
+
+    # Применение стилей и переносов
+    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical='center')  # включаем перенос текста
+
     # Записываем данные DataFrame начиная со start_row
     for row_offset, row in enumerate(dataframe_to_rows(df, index=False, header=False)):
         for i, value in enumerate(row):
@@ -260,6 +271,6 @@ missingdf = df_src.drop(columns=comparison_cols)
 if not args.append:
     save_missing(missingdf, f'missing_{args.site}.xlsx')
 else:
-    append_dataframe_to_excel(missingdf, args.input_path, args.output_path, args.start_row)
+    append_dataframe_to_excel(missingdf, args.output_path, args.output_path, args.start_row)
 
 print("Successfully finished")
