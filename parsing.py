@@ -12,18 +12,26 @@ import warnings
 warnings.filterwarnings("ignore")
 import argparse
 import os
+from ruwordnet import RuWordNet
+import pymorphy2
+from itertools import product
+from pathlib import Path
+
+synonyms_path='synonyms.txt'
+all_characteristics_path='all_characteristics.xlsx'
 
 # ---------------------------------------------------Остановить программу если не введено ни одного аргумента---------------------------------------------------
 # Номер строки, взятый из аргументов запуска программы
 parser = argparse.ArgumentParser(description="Парсинг данных в excel-файл с одного типа сайтов. В качестве входного файла используется выгрузка из 1С. " \
 "Выходной файл создаётся по образу и подобию входного, является результатом парсинга. Если какая-то ячейка уже была заполнена в excel-файле, то она не " \
-"будет перезаписана. Возможно дополнение файла столбцами на основе найденных на сайте характеристик. Дополнительно сохраняется вспомогательный csv-файл " \
-"для дальнейшего сравнения данных с разных сайтов")
+"будет перезаписана. Возможно дополнение файла столбцами на основе найденных на сайте характеристик. Дополнительно сохраняется вспомогательный .parquet-файл " \
+"для дальнейшего сравнения данных с разных сайтов, а также .txt-файл для дальнейшей генерации отчёта о синонимах.")
 
 parser.add_argument("start_row", type=int, help="Номер строки в excel, начиная с которой необходимо писать данные")
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
-"False")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf')
+"False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
+"будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -33,6 +41,9 @@ args = parser.parse_args()
 if not args.output_path:
     raise ValueError("there's not enough arguments")
 args.append = True if args.append.lower() == 'true' else False
+
+# Проверка, не повреждены ли входные файлы
+wb = load_workbook(args.input_path)
 
 # ------------------------------------------------------------------------Спарсить данные------------------------------------------------------------------------
 
@@ -51,6 +62,25 @@ def parse_korting_page(html_code):
                 data[key.strip()] = value.strip()
             else:
                 data[split_text[0].strip()] = ""
+
+    return data
+
+def parse_dedietrich_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='characteristics__row'):
+        name_span = row.find('span', class_='characteristics__name')
+        value_span = row.find('span', class_='characteristics__property')
+        
+        if name_span and value_span:
+            key = name_span.find(text=True, recursive=False)
+            value = value_span.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
 
     return data
 
@@ -143,13 +173,6 @@ def create_src(file_path, parser_func):
 
     return df_all.where(pd.notnull(df_all), None)
 
-if args.site == 'korting':
-    df_src = create_src(args.urls_source, parse_korting_page)
-elif args.site == 'housedorf':
-    df_src = create_src(args.urls_source, parse_hausedorf_page)
-else:
-    raise ValueError("There're no parse function for this site")
-
 # ---------------------------------------------Записать и вернуть дополненный названиями номенклатуры DataFrame---------------------------------------------
 
 def write_dest(ref_file_path, result_file_path, df_src, start_row_index):
@@ -165,7 +188,6 @@ def write_dest(ref_file_path, result_file_path, df_src, start_row_index):
     ws_cols_lower = {i: str(header).strip().lower() if header else "" for i, header in enumerate(row_header)}
     matched_columns = []
     common_cols = set()
-    missing_cols = set()
     nomenclature_col_idx = None
 
     for col_idx, header_lower in ws_cols_lower.items():
@@ -174,8 +196,6 @@ def write_dest(ref_file_path, result_file_path, df_src, start_row_index):
         if header_lower in src_cols_lower:
             matched_columns.append((col_idx, src_cols_lower[header_lower]))
             common_cols.add(src_cols_lower[header_lower])
-        else:
-            missing_cols.add(header_lower)
 
     if nomenclature_col_idx is None:
         raise ValueError("Колонка 'Номенклатура' не найдена в файле-приёмнике")
@@ -200,10 +220,7 @@ def write_dest(ref_file_path, result_file_path, df_src, start_row_index):
     result_df = df_src[list(common_cols)].copy()
     result_df.insert(0, "Номенклатура", pd.Series(nomenclature_values))
 
-    return result_df, missing_cols
-
-resultdf, _ = write_dest(args.input_path, args.output_path, df_src, args.start_row)
-resultdf.to_parquet(f"{args.site}_auxiliary.parquet")
+    return result_df, common_cols
 
 # -------------------------------------------Сохранить незаписанные данные в дополнительные колонки или отдельный файл-------------------------------------------
 
@@ -266,11 +283,110 @@ def save_missing(df1, filepath):
             adjusted_width = max_length + 2
             worksheet.column_dimensions[get_column_letter(column)].width = adjusted_width
 
-comparison_cols = [col for col in resultdf.columns if col != 'Номенклатура']
-missingdf = df_src.drop(columns=comparison_cols)
-if not args.append:
-    save_missing(missingdf, f'missing_{args.site}.xlsx')
+# ---------------------------------------------------------Добавить функции для сопоставления синонимов---------------------------------------------------------
+
+wordnet = RuWordNet()
+morph = pymorphy2.MorphAnalyzer()
+
+def get_normal_form(word):
+    return morph.parse(word)[0].normal_form
+
+def are_synonyms(word1, word2):
+    lemma1 = get_normal_form(word1)
+    lemma2 = get_normal_form(word2)
+
+    synsets1 = wordnet.get_synsets(lemma1)
+    synsets2 = wordnet.get_synsets(lemma2)
+
+    # Сравниваем наличие общих лемм в синсетах
+    for s1 in synsets1:
+        for s2 in synsets2:
+            if s1.id == s2.id:
+                return True
+    return False
+
+def list_synonyms_comparison(list1, list2):
+    return [are_synonyms(word1, word2) for word1, word2 in zip(list1, list2)]
+
+# -----------------------------Добавить функцию для обеспечения правильного дописывания данных основываясь на утверждённых синонимах-----------------------------
+
+def parse_custom_dict_line(line):
+    """
+    Разбирает строку из словаря: <характеристика>: <синоним1>; <синоним2>; ...| <антисиноним1>, <антисиноним2>, ...
+    """
+    base, *rest = line.strip().split(':')
+    if not rest:
+        return base.strip(), set(), set()
+    syn_ant = rest[0].split('|')
+    synonyms = set(map(str.strip, syn_ant[0].split(';'))) if syn_ant[0] else set()
+    antonyms = set(map(str.strip, syn_ant[1].split(','))) if len(syn_ant) > 1 else set()
+    return base.strip(), synonyms, antonyms
+
+def load_existing_synonyms(file_path):
+    syn_dict = {}
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            base, synonyms, antonyms = parse_custom_dict_line(line)
+            syn_dict[base] = {'synonyms': synonyms, 'antonyms': antonyms}
+    return syn_dict
+
+def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
+    # Загрузка словаря
+    synonyms_dict = load_existing_synonyms(syn_dict_path)
+    all_chars = pd.read_excel(all_1c_chars_path, header=None).iloc[0].astype(str).tolist()
+    all_chars_lower = [char.lower() for char in all_chars]  # Приводим к нижнему регистру для сравнения
+
+    # Удаление дублирующихся колонок по имени
+    df = df.loc[:, ~df.columns.duplicated()]
+
+    # Поиск синонимичных имен колонок через словарь
+    df_expanded = df.copy()
+    unsyn_set = set()
+    for col in df.columns:
+        flag = False
+        for synonym_key, syn_data in synonyms_dict.items():
+            syn_set = syn_data.get("synonyms", set())
+            if col in syn_set:
+                # Добавляем колонку с именем synonym_key, если она отличается и ещё не существует
+                if synonym_key != col and synonym_key not in df_expanded.columns:
+                    df_expanded[synonym_key] = df[col]
+                    flag = True
+            elif col.lower() in all_chars_lower:
+                continue
+            else:
+                unsyn_set.add(col)
+        if flag:
+            # Если колонка была переименована, удаляем оригинальную
+            df_expanded.drop(columns=[col], inplace=True)
+
+    return df_expanded, unsyn_set
+
+# -----------------------------------------------------------Запуск парсинга и сохранение результатов-----------------------------------------------------------
+
+if args.site == 'korting':
+    df_src = create_src(args.urls_source, parse_korting_page)
+elif args.site == 'housedorf':
+    df_src = create_src(args.urls_source, parse_hausedorf_page)
+elif args.site == 'dedietrich':
+    df_src = create_src(args.urls_source, parse_dedietrich_page)
 else:
+    raise ValueError("There're no parse function for this site")
+
+df_src, unsyn_set = rename_columns_with_syn_dict(df_src, synonyms_path, all_characteristics_path) # Для обеспечения правильного дописывания данных и для корректного входа к функции, 
+                                                                        # генерирующей отчёт
+resultdf, com_cols = write_dest(args.input_path, args.output_path, df_src, args.start_row)
+resultdf.to_parquet(f"{args.site}_auxiliary.parquet")
+
+com_cols = resultdf.columns.intersection(df_src.columns)
+missingdf = df_src.drop(columns=com_cols).copy()
+print(unsyn_set)
+with open(f'unaccepted_syn_{args.site}.txt', 'w') as f:
+    f.write('; '.join(map(str, unsyn_set)))
+
+if args.append:
     append_dataframe_to_excel(missingdf, args.output_path, args.output_path, args.start_row)
+else:
+    missingdf.insert(0, 'Номенклатура', resultdf['Номенклатура'].copy())
+    save_missing(missingdf, f'missing_{args.site}.xlsx')
 
 print("Successfully finished")
