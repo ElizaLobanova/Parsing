@@ -13,7 +13,7 @@ Add files example.xlsx, urls_korting.txt, urls_hausedorf.txt. You can use folder
 
 # How to use
 
-Just run `python parsing.py --help`, `python synonyms_dict_update.py --help` and `python compare.py --help`, and read. Example:
+Just run `python parsing.py --help`, `python synonyms_dict_update.py --help`, `python generate_syn_report.py --help` and `python compare.py --help`, and read. Example:
 ```
 python parsing.py 34 True housedorf input_example/url_housedorf.txt input_example/example.xlsx result_housedorf.xlsx syn_report_housedorf.xlsx
 python parsing.py 34 False korting input_example/url_korting.txt input_example/example.xlsx result.xlsx syn_report_korting.xlsx
