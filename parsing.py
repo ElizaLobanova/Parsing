@@ -31,7 +31,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -77,6 +77,31 @@ def parse_dedietrich_page(html_code: str) -> dict:
         if name_span and value_span:
             key = name_span.find(text=True, recursive=False)
             value = value_span.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
+
+    return data
+
+def parse_falmec_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='characteristics__row'):
+        name_span = row.find('span', class_='characteristics__name')
+        value_span = row.find('span', class_='characteristics__property')
+        
+        if name_span and value_span:
+            key = name_span.find(text=True, recursive=False)
+            value = value_span.find(text=True, recursive=False)
+
+            # Если нет простого текста, ищем <ul> и собираем <li>
+            if (value == '' or not value.strip()) and value_span.find('ul'):
+                li_items = value_span.find_all('li')
+                value = '; '.join(li.get_text(strip=True) for li in li_items)
+
             if key and value:
                 key = key.strip()
                 value = value.strip()
@@ -370,6 +395,8 @@ elif args.site == 'housedorf':
     df_src = create_src(args.urls_source, parse_hausedorf_page)
 elif args.site == 'dedietrich':
     df_src = create_src(args.urls_source, parse_dedietrich_page)
+elif args.site == 'falmec':
+    df_src = create_src(args.urls_source, parse_falmec_page)
 else:
     raise ValueError("There're no parse function for this site")
 
