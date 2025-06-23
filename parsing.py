@@ -351,13 +351,14 @@ def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
                 if synonym_key != col and synonym_key not in df_expanded.columns:
                     df_expanded[synonym_key] = df[col]
                     flag = True
-            elif col.lower() in all_chars_lower:
-                continue
-            else:
-                unsyn_set.add(col)
         if flag:
             # Если колонка была переименована, удаляем оригинальную
             df_expanded.drop(columns=[col], inplace=True)
+        elif col.lower() in all_chars_lower:
+            df_expanded[col.upper()] = df[col]
+            df_expanded.drop(columns=[col], inplace=True)
+        else:
+            unsyn_set.add(col)
 
     return df_expanded, unsyn_set
 

@@ -5,6 +5,10 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import PatternFill, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
 import argparse
+from itertools import product
+from ruwordnet import RuWordNet
+import pymorphy2
+import re
 
 # ---------------------------------------------------Остановить программу если не введено ни одного аргумента---------------------------------------------------
 # Номер строки, взятый из аргументов запуска программы
@@ -20,6 +24,40 @@ if not args.site2:
     raise ValueError("there's not enough arguments")
 if args.site1 == args.site2:
     raise ValueError("the arguments coincide, comparison is impossible")
+
+# ---------------------------------------------------------Добавить функции для сопоставления синонимов---------------------------------------------------------
+
+wordnet = RuWordNet()
+morph = pymorphy2.MorphAnalyzer()
+
+def get_normal_form(word):
+    return morph.parse(word)[0].normal_form
+
+def are_synonyms(word1, word2):
+    lemma1 = get_normal_form(word1)
+    lemma2 = get_normal_form(word2)
+
+    synsets1 = wordnet.get_synsets(lemma1)
+    synsets2 = wordnet.get_synsets(lemma2)
+
+    # Сравниваем наличие общих лемм в синсетах
+    for s1 in synsets1:
+        for s2 in synsets2:
+            if s1.id == s2.id:
+                return True
+    return False
+
+def tokenize(text):
+    return set(re.findall(r'\w+', text.lower()))
+
+def are_words_possibly_synonyms(words1, words2, are_synonims_func):
+    pairs = product(words1, words2)
+    for w1, w2 in pairs:
+        if w1 == w2:
+            return True
+        if are_synonims_func(w1, w2):
+            return True
+    return False
 
 # -------------------------------------------------------------------Сравнить записанные данные-------------------------------------------------------------------
 
@@ -53,18 +91,17 @@ def compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame, name1: str = 'df1',
             val2 = row.get(f'{name2}_{col}', None)
             if pd.isna(val1) or pd.isna(val2):
                 continue
-            if val1 != val2:
-                diffs.append(col)
+            else:
+                tokens1 = tokenize(str(val1))
+                tokens2 = tokenize(str(val2))
+                if not are_words_possibly_synonyms(tokens1, tokens2, are_synonyms):
+                    diffs.append(col)
         return ', '.join(diffs)
 
     # Добавление столбца с различиями
     df_merged['diff_columns'] = df_merged.apply(get_differences, axis=1)
 
     return df_merged
-
-resultdf_1 = pd.read_parquet(f"{args.site1}_auxiliary.parquet")
-resultdf_2 = pd.read_parquet(f"{args.site2}_auxiliary.parquet")
-comp_result = compare_dataframes(resultdf_1, resultdf_2, args.site1, args.site2)
 
 # --------------------------------------------------------------Сохранить результат сравнения в excel--------------------------------------------------------------
 
@@ -83,13 +120,13 @@ def save_comparison_to_excel(df: pd.DataFrame, filename: str):
     diff_col_index = len(headers)
     prefix_columns = [col for col in headers if col != 'Номенклатура' and col != 'diff_columns']
 
-    # --- Автонастройка ширины столбцов по первой строке ---
+    # Автонастройка ширины столбцов по первой строке
     for col_idx, cell in enumerate(ws[1], start=1):
         max_length = len(str(cell.value)) if cell.value else 0
         col_letter = cell.column_letter
         ws.column_dimensions[col_letter].width = max_length + 2  # +2 для отступа
 
-    # --- Применение стилей и переносов ---
+    # Применение стилей и переносов
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=ws.max_column):
         diff_text = row[diff_col_index - 1].value
         for cell in row:
@@ -104,5 +141,9 @@ def save_comparison_to_excel(df: pd.DataFrame, filename: str):
         row[diff_col_index - 1].fill = red_fill
 
     wb.save(filename)
+
+resultdf_1 = pd.read_parquet(f"{args.site1}_auxiliary.parquet")
+resultdf_2 = pd.read_parquet(f"{args.site2}_auxiliary.parquet")
+comp_result = compare_dataframes(resultdf_1, resultdf_2, args.site1, args.site2)
 
 save_comparison_to_excel(comp_result, f'comparison_{args.site1}_vs_{args.site2}.xlsx')

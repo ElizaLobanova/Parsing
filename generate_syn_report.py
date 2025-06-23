@@ -71,7 +71,7 @@ def load_existing_synonyms(file_path):
 def tokenize(text):
     return set(re.findall(r'\w+', text.lower()))
 
-def are_words_possibly_synonyms(words1, words2, custom_dict, are_synonims_func):
+def are_words_possibly_synonyms(words1, words2, are_synonims_func):
     pairs = product(words1, words2)
     for w1, w2 in pairs:
         if w1 == w2:
@@ -92,12 +92,12 @@ def generate_synonym_report(existing_dict_path, all_1c_chars_path, new_chars, ar
                 continue
             tokens1 = tokenize(c1)
             tokens2 = tokenize(c2)
-            if are_words_possibly_synonyms(tokens1, tokens2, custom_dict, are_synonims_func):
+            if are_words_possibly_synonyms(tokens1, tokens2, are_synonims_func):
                 result_rows.append((c1, c2, None))  # None для ручной отметки
 
     df_result = pd.DataFrame(result_rows, columns=["base_char", "compared_char", "label"])
     df_result.to_excel(output_excel_path, index=False)
-
+    
 # -----------------------------------------------------------------------Запуск генерации-----------------------------------------------------------------------
 
 with open(f'unaccepted_syn_{args.site}.txt', 'r') as f:
