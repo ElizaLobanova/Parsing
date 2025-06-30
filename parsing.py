@@ -8,6 +8,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import PatternFill, Alignment
 import re
 from tqdm import tqdm
+import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 import argparse
@@ -31,7 +32,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -62,6 +63,27 @@ def parse_korting_page(html_code):
                 data[key.strip()] = value.strip()
             else:
                 data[split_text[0].strip()] = ""
+
+    return data
+
+def parse_vzug_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+    names = soup.find_all('td', class_='cell_name')
+    values = soup.find_all('td', class_='cell_value')
+
+    # Проходим по всем div с классом characteristics__row
+    for name, value in zip(names, values):
+        name_span = name.find('span')
+        value_span = value.find('span')
+        
+        if name_span and value_span:
+            key = name_span.find(text=True, recursive=False)
+            value = value_span.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
 
     return data
 
@@ -163,7 +185,6 @@ def parse_hausedorf_page(html_code):
 
     return data
 
-
 def create_src(file_path, parser_func):
     """
     Универсальный загрузчик таблицы характеристик с разных сайтов.
@@ -178,6 +199,7 @@ def create_src(file_path, parser_func):
     with open(file_path, 'r', encoding='utf-8') as f:
         urls = [line.strip() for line in f]
 
+    n_rows = 0
     for url in tqdm(urls):
         if url:
             try:
@@ -191,10 +213,17 @@ def create_src(file_path, parser_func):
                 row_df = pd.DataFrame([data])
                 df_all = pd.concat([df_all, row_df], ignore_index=True)
 
+                if len(df_all) == 1:
+                    empty_rows = pd.DataFrame(np.nan, index=range(n_rows), columns=df_all.columns)
+                    df_all = pd.concat([empty_rows, df_all], ignore_index=True)
+
             except Exception as e:
                 print(f"Ошибка при обработке {url}: {e}")
         else:
-            df_all.loc[len(df_all)] = None
+            if len(df_all.columns) > 0:                
+                df_all.loc[len(df_all)] = None
+            else:
+                n_rows += 1
 
     return df_all.where(pd.notnull(df_all), None)
 
@@ -397,6 +426,8 @@ elif args.site == 'dedietrich':
     df_src = create_src(args.urls_source, parse_dedietrich_page)
 elif args.site == 'falmec':
     df_src = create_src(args.urls_source, parse_falmec_page)
+elif args.site == 'vzug':
+    df_src = create_src(args.urls_source, parse_vzug_page)
 else:
     raise ValueError("There're no parse function for this site")
 
@@ -408,7 +439,7 @@ resultdf.to_parquet(f"{args.site}_auxiliary.parquet")
 com_cols = resultdf.columns.intersection(df_src.columns)
 missingdf = df_src.drop(columns=com_cols).copy()
 print(unsyn_set)
-with open(f'unaccepted_syn_{args.site}.txt', 'w') as f:
+with open(f'unaccepted_syn_{args.site}.txt', 'w', encoding='utf-8') as f:
     f.write('; '.join(map(str, unsyn_set)))
 
 if args.append:

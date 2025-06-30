@@ -5,7 +5,7 @@ First, make sure that python and git is installed (https://www.python.org/ftp/py
 ```
 git clone https://github.com/ElizaLobanova/Parsing.git
 cd Parsing
-pip install urllib3 beautifulsoup4 pandas openpyxl regex tqdm pyarrow ruwordnet pymorphy2
+pip install urllib3 beautifulsoup4 pandas openpyxl regex tqdm pyarrow ruwordnet pymorphy2 numpy
 ruwordnet download
 ```
 
