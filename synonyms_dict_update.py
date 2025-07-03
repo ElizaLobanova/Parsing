@@ -56,10 +56,19 @@ def update_synonym_dict_from_excel(excel_path, dict_path):
 
         if label == 1:
             syn_dict[base]["synonyms"].add(comp)
-        elif label == 0:
+        elif label == 0.5:
+            syn_dict[base]["synonyms"].add("*"+comp)
+        elif label == 0 or pd.isna(label):
             syn_dict[base]["antisynonyms"].add(comp)
         else:
             continue  # Пропустить некорректные значения
+
+    # Удалить пересекающиеся значения
+    for base in syn_dict:
+        overlap1 = syn_dict[base]["synonyms"] & syn_dict[base]["antisynonyms"]
+        overlap2 = set(map(lambda x: x.split("*")[1] if len(x.split("*")) > 1 else x, syn_dict[base]["synonyms"])) & syn_dict[base]["antisynonyms"]
+        syn_dict[base]["antisynonyms"] -= overlap1
+        syn_dict[base]["antisynonyms"] -= overlap2
 
     save_synonym_dict(syn_dict, dict_path)
     print(f"Обновлённый словарь сохранён в {dict_path}")

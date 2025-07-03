@@ -66,16 +66,14 @@ def parse_korting_page(html_code):
 
     return data
 
-def parse_vzug_page(html_code: str) -> dict:
+def parse_dedietrich_page(html_code: str) -> dict:
     soup = BeautifulSoup(html_code, 'html.parser')
     data = {}
-    names = soup.find_all('td', class_='cell_name')
-    values = soup.find_all('td', class_='cell_value')
 
     # Проходим по всем div с классом characteristics__row
-    for name, value in zip(names, values):
-        name_span = name.find('span')
-        value_span = value.find('span')
+    for row in soup.find_all('div', class_='characteristics__row'):
+        name_span = row.find('span', class_='characteristics__name')
+        value_span = row.find('span', class_='characteristics__property')
         
         if name_span and value_span:
             key = name_span.find(text=True, recursive=False)
@@ -87,14 +85,16 @@ def parse_vzug_page(html_code: str) -> dict:
 
     return data
 
-def parse_dedietrich_page(html_code: str) -> dict:
+def parse_vzug_page(html_code: str) -> dict:
     soup = BeautifulSoup(html_code, 'html.parser')
     data = {}
+    names = soup.find_all('td', class_='cell_name')
+    values = soup.find_all('td', class_='cell_value')
 
     # Проходим по всем div с классом characteristics__row
-    for row in soup.find_all('div', class_='characteristics__row'):
-        name_span = row.find('span', class_='characteristics__name')
-        value_span = row.find('span', class_='characteristics__property')
+    for name, value in zip(names, values):
+        name_span = name.find('span')
+        value_span = value.find('span')
         
         if name_span and value_span:
             key = name_span.find(text=True, recursive=False)
@@ -184,6 +184,7 @@ def parse_hausedorf_page(html_code):
                 data[re.sub(r'\s+', ' ', key).strip()] = value.replace(">\n", "")
 
     return data
+
 
 def create_src(file_path, parser_func):
     """
@@ -295,7 +296,10 @@ def append_dataframe_to_excel(df: pd.DataFrame, file_path: str, result_path: str
 
     # Записываем названия колонок DataFrame в первую строку, начиная с найденной колонки
     for i, col_name in enumerate(df.columns):
-        ws.cell(row=1, column=col_index + i, value=col_name)
+        cell = ws.cell(row=1, column=col_index + i, value=col_name)
+        if len(col_name.split('_')) > 1:
+            cell.fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+            
 
     # Автонастройка ширины столбцов по первой строке
     for col_idx, cell in enumerate(ws[1], start=col_index):
@@ -373,15 +377,15 @@ def parse_custom_dict_line(line):
         return base.strip(), set(), set()
     syn_ant = rest[0].split('|')
     synonyms = set(map(str.strip, syn_ant[0].split(';'))) if syn_ant[0] else set()
-    antonyms = set(map(str.strip, syn_ant[1].split(','))) if len(syn_ant) > 1 else set()
-    return base.strip(), synonyms, antonyms
+    antisynonyms = set(map(str.strip, syn_ant[1].split(','))) if len(syn_ant) > 1 else set()
+    return base.strip(), synonyms, antisynonyms
 
 def load_existing_synonyms(file_path):
     syn_dict = {}
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
-            base, synonyms, antonyms = parse_custom_dict_line(line)
-            syn_dict[base] = {'synonyms': synonyms, 'antonyms': antonyms}
+            base, synonyms, antisynonyms = parse_custom_dict_line(line)
+            syn_dict[base] = {'synonyms': synonyms, 'antisynonyms': antisynonyms}
     return syn_dict
 
 def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
@@ -397,22 +401,45 @@ def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
     df_expanded = df.copy()
     unsyn_set = set()
     for col in df.columns:
-        flag = False
+        # Если колонка уже есть в 1С - пропускаем её
+        if col.lower() in all_chars_lower:
+            df_expanded[col.upper()] = df[col]
+            df_expanded.drop(columns=[col], inplace=True)
+            continue
+
+        is_syn = False
         for synonym_key, syn_data in synonyms_dict.items():
             syn_set = syn_data.get("synonyms", set())
             if col in syn_set:
-                # Добавляем колонку с именем synonym_key, если она отличается и ещё не существует
-                if synonym_key != col and synonym_key not in df_expanded.columns:
+                # Добавляем колонку с именем synonym_key, если она ещё не существует
+                if synonym_key not in df_expanded.columns:
                     df_expanded[synonym_key] = df[col]
-                    flag = True
-        if flag:
-            # Если колонка была переименована, удаляем оригинальную
-            df_expanded.drop(columns=[col], inplace=True)
-        elif col.lower() in all_chars_lower:
-            df_expanded[col.upper()] = df[col]
+                    is_syn = True
+        if is_syn:
+            # Если колонка была переименована, удаляем оригинальную и не ищем полусинонимы
             df_expanded.drop(columns=[col], inplace=True)
         else:
-            unsyn_set.add(col)
+            is_half_syn = False
+            for synonym_key, syn_data in synonyms_dict.items():
+                syn_set = syn_data.get("synonyms", set())
+                if col in set(map(lambda x: x.split("*")[1] if len(x.split("*")) > 1 else x, syn_set)):
+                    # Добавляем колонку с именем synonym_key, если она ещё не существует
+                    if synonym_key not in df_expanded.columns:
+                        df_expanded[f"{synonym_key}_{col}"] = df[col]
+                        is_half_syn = True
+
+            if is_half_syn:
+                df_expanded.drop(columns=[col], inplace=True)
+            else:
+                is_antisyn = False
+                for synonym_key, syn_data in synonyms_dict.items():
+                    antisyn_set = syn_data.get("antisynonyms", set())
+                    if col in antisyn_set:
+                        is_antisyn = True
+                        break
+
+                if not is_antisyn:
+                    unsyn_set.add(col)
 
     return df_expanded, unsyn_set
 
@@ -439,13 +466,21 @@ resultdf.to_parquet(f"{args.site}_auxiliary.parquet")
 com_cols = resultdf.columns.intersection(df_src.columns)
 missingdf = df_src.drop(columns=com_cols).copy()
 print(unsyn_set)
-with open(f'unaccepted_syn_{args.site}.txt', 'w', encoding='utf-8') as f:
+with open(f'unaccepted_syn_{args.site}.txt', 'w') as f:
     f.write('; '.join(map(str, unsyn_set)))
 
 if args.append:
     append_dataframe_to_excel(missingdf, args.output_path, args.output_path, args.start_row)
 else:
-    missingdf.insert(0, 'Номенклатура', resultdf['Номенклатура'].copy())
-    save_missing(missingdf, f'missing_{args.site}.xlsx')
+    # Условие: имена столбцов, у которых есть хотя бы один символ "_"
+    columns_with_underscore = [col for col in missingdf.columns if len(col.split("_")) > 1]
+    columns_without_underscore = [col for col in missingdf.columns if len(col.split("_")) <= 1]
 
+    # Делим missingdf на два
+    df_with_underscore = missingdf[columns_with_underscore]
+    df_without_underscore = missingdf[columns_without_underscore]
+    df_without_underscore.insert(0, 'Номенклатура', resultdf['Номенклатура'].copy())
+    save_missing(df_without_underscore, f'missing_{args.site}.xlsx')
+    append_dataframe_to_excel(df_with_underscore, args.output_path, args.output_path, args.start_row)
+    
 print("Successfully finished")
