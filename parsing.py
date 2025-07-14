@@ -22,7 +22,6 @@ synonyms_path='synonyms.txt'
 all_characteristics_path='all_characteristics.xlsx'
 
 # ---------------------------------------------------Остановить программу если не введено ни одного аргумента---------------------------------------------------
-# Номер строки, взятый из аргументов запуска программы
 parser = argparse.ArgumentParser(description="Парсинг данных в excel-файл с одного типа сайтов. В качестве входного файла используется выгрузка из 1С. " \
 "Выходной файл создаётся по образу и подобию входного, является результатом парсинга. Если какая-то ячейка уже была заполнена в excel-файле, то она не " \
 "будет перезаписана. Возможно дополнение файла столбцами на основе найденных на сайте характеристик. Дополнительно сохраняется вспомогательный .parquet-файл " \
@@ -401,16 +400,17 @@ def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
     df_expanded = df.copy()
     unsyn_set = set()
     for col in df.columns:
+        col_splitted = col.split(':')[0]
         # Если колонка уже есть в 1С - пропускаем её
-        if col.lower() in all_chars_lower:
-            df_expanded[col.upper()] = df[col]
+        if col_splitted.lower() in all_chars_lower:
+            df_expanded[col_splitted.upper()] = df[col]
             df_expanded.drop(columns=[col], inplace=True)
             continue
 
         is_syn = False
         for synonym_key, syn_data in synonyms_dict.items():
             syn_set = syn_data.get("synonyms", set())
-            if col in syn_set:
+            if col_splitted in syn_set:
                 # Добавляем колонку с именем synonym_key, если она ещё не существует
                 if synonym_key not in df_expanded.columns:
                     df_expanded[synonym_key] = df[col]
@@ -422,10 +422,10 @@ def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
             is_half_syn = False
             for synonym_key, syn_data in synonyms_dict.items():
                 syn_set = syn_data.get("synonyms", set())
-                if col in set(map(lambda x: x.split("*")[1] if len(x.split("*")) > 1 else x, syn_set)):
+                if col_splitted in set(map(lambda x: x.split("*")[1] if len(x.split("*")) > 1 else x, syn_set)):
                     # Добавляем колонку с именем synonym_key, если она ещё не существует
                     if synonym_key not in df_expanded.columns:
-                        df_expanded[f"{synonym_key}_{col}"] = df[col]
+                        df_expanded[f"{synonym_key}_{col_splitted}"] = df[col]
                         is_half_syn = True
 
             if is_half_syn:
@@ -434,12 +434,12 @@ def rename_columns_with_syn_dict(df, syn_dict_path, all_1c_chars_path):
                 is_antisyn = False
                 for synonym_key, syn_data in synonyms_dict.items():
                     antisyn_set = syn_data.get("antisynonyms", set())
-                    if col in antisyn_set:
+                    if col_splitted in antisyn_set:
                         is_antisyn = True
                         break
 
                 if not is_antisyn:
-                    unsyn_set.add(col)
+                    unsyn_set.add(col_splitted)
 
     return df_expanded, unsyn_set
 
@@ -466,7 +466,7 @@ resultdf.to_parquet(f"{args.site}_auxiliary.parquet")
 com_cols = resultdf.columns.intersection(df_src.columns)
 missingdf = df_src.drop(columns=com_cols).copy()
 print(unsyn_set)
-with open(f'unaccepted_syn_{args.site}.txt', 'w') as f:
+with open(f'unaccepted_syn_{args.site}.txt', 'w', encoding='utf-8') as f:
     f.write('; '.join(map(str, unsyn_set)))
 
 if args.append:

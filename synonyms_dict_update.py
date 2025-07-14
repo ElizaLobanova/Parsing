@@ -27,7 +27,7 @@ def load_synonym_dict(dict_path):
             key, rest = line.strip().split(":", 1)
             syn_part, *anti_part = rest.strip().split("|")
             syns = set(map(str.strip, syn_part.strip().split(";"))) if syn_part.strip() else set()
-            antis = set(map(str.strip, anti_part[0].strip().split(","))) if anti_part and anti_part[0].strip() else set()
+            antis = set(map(str.strip, anti_part[0].strip().split(";"))) if anti_part and anti_part[0].strip() else set()
             syn_dict[key.strip()]["synonyms"].update(syns)
             syn_dict[key.strip()]["antisynonyms"].update(antis)
     return syn_dict
@@ -37,7 +37,7 @@ def save_synonym_dict(syn_dict, dict_path):
     with open(dict_path, "w", encoding="utf-8") as f:
         for key in sorted(syn_dict.keys()):
             syns = "; ".join(sorted(syn_dict[key]["synonyms"]))
-            antis = ", ".join(sorted(syn_dict[key]["antisynonyms"]))
+            antis = "; ".join(sorted(syn_dict[key]["antisynonyms"]))
             line = f"{key}: {syns} | {antis}\n"
             f.write(line)
 
@@ -50,8 +50,8 @@ def update_synonym_dict_from_excel(excel_path, dict_path):
     syn_dict = load_synonym_dict(dict_path)
 
     for _, row in df.iterrows():
-        base = row["base_char"].strip()
-        comp = row["compared_char"].strip()
+        base = row["base_char"].strip().split(":")[0]
+        comp = row["compared_char"].strip().split(":")[0]
         label = row["label"]
 
         if label == 1:

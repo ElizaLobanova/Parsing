@@ -17,7 +17,6 @@ Just run `python parsing.py --help`, `python synonyms_dict_update.py --help`, `p
 ```
 python parsing.py 34 True housedorf input_example/url_housedorf.txt input_example/example.xlsx result_housedorf.xlsx
 python parsing.py 34 False korting input_example/url_korting.txt input_example/example.xlsx result.xlsx
-python compare.py korting housedorf
 python generate_syn_report.py housedorf syn_report_housedorf.xlsx
 python generate_syn_report.py korting syn_report_korting.xlsx
 ```
@@ -25,4 +24,7 @@ If syn_report_housedorf.xlsx and syn_report_korting.xlsx are approved:
 ```
 python synonyms_dict_update.py syn_report_housedorf.xlsx
 python synonyms_dict_update.py syn_report_korting.xlsx
+python parsing.py 34 True housedorf input_example/url_housedorf.txt input_example/example.xlsx result_housedorf.xlsx
+python parsing.py 34 False korting input_example/url_korting.txt input_example/example.xlsx result.xlsx
+python compare.py korting housedorf
 ```
