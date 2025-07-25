@@ -31,7 +31,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -102,6 +102,43 @@ def parse_vzug_page(html_code: str) -> dict:
                 key = key.strip()
                 value = value.strip()
                 data[key] = value
+
+    return data
+
+def parse_asco_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='accordeon__item'):
+        name_span = row.find('span', class_='accordeon__item-title')
+        value_span = row.find('p', class_='accordeon__item-text')
+        
+        if name_span and value_span:
+            key = name_span.find(text=True, recursive=False)
+            value = value_span.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
+
+    return data
+
+def parse_kuppersbush_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='wdu_propsorter'):
+        for item in row.find_all('tr'):
+            tds = item.find_all('td')
+
+            if tds:
+                name_td, value_td = tds
+                key = name_td.get_text(strip=True)
+                value = value_td.get_text(strip=True)
+                if key and value:
+                    data[key] = value
 
     return data
 
@@ -455,6 +492,10 @@ elif args.site == 'falmec':
     df_src = create_src(args.urls_source, parse_falmec_page)
 elif args.site == 'vzug':
     df_src = create_src(args.urls_source, parse_vzug_page)
+elif args.site == 'asco':
+    df_src = create_src(args.urls_source, parse_asco_page)
+elif args.site == 'kuppersbush':
+    df_src = create_src(args.urls_source, parse_kuppersbush_page)
 else:
     raise ValueError("There're no parse function for this site")
 

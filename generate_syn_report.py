@@ -14,7 +14,7 @@ all_characteristics_path='all_characteristics.xlsx'
 parser = argparse.ArgumentParser(description="На основе .txt-файла, генерируемого программой парсинга, создаётся отчёт с предполагаемыми синонимами к " \
 "незаписанным характеристикам. В любом случае будет выведено множество характеристик, для которых ещё не проводился поиск синонимов среди имеющихся в 1С")
 
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush')
 parser.add_argument("synonyms_report_path", type=str, default=None, help='Файл для записи отчёта о синонимах. Если не указан, то поиска синонимов не будет (учтите, что для более чем 5 характеристик составление отчёта занимает более 10 минут).')
 
 args = parser.parse_args()
