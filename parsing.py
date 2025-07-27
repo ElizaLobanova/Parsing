@@ -31,7 +31,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush, konigin')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -139,6 +139,42 @@ def parse_kuppersbush_page(html_code: str) -> dict:
                 value = value_td.get_text(strip=True)
                 if key and value:
                     data[key] = value
+
+    return data
+
+def parse_konigin_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # 1. Извлекаем div.column и все p внутри
+    column_div = soup.find('div', class_='column')
+    if column_div:
+        p_tags = column_div.find_all('p')
+        # Игнорируем первые 2 и последние 3
+        middle_p_tags = p_tags[2:-3]
+
+        # Соединяем текст через "; "
+        additional_info = "; ".join(p.get_text(strip=True).rstrip('.,;!?—:') for p in middle_p_tags)
+        data['ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ'] = additional_info
+
+        # Обрабатываем последние два тега <p>
+        for p in p_tags[-2:]:
+            text = p.get_text(strip=True)
+            # Делим по точкам
+            for part in text.split('.'):
+                if ':' in part:
+                    key, value = part.split(':', 1)
+                    data[key.strip()] = value.strip()
+
+    # 2. Обрабатываем блоки div.card-spec__item
+    spec_items = soup.find_all('div', class_='card-spec__item')
+    for item in spec_items:
+        title_div = item.find('div', class_='card-spec__item-title')
+        info_div = item.find('div', class_='card-spec__item-info')
+        if title_div and info_div:
+            key = title_div.get_text(strip=True)
+            value = info_div.get_text(strip=True).rstrip('.,;!?—:')
+            data[key] = value
 
     return data
 
@@ -496,6 +532,8 @@ elif args.site == 'asco':
     df_src = create_src(args.urls_source, parse_asco_page)
 elif args.site == 'kuppersbush':
     df_src = create_src(args.urls_source, parse_kuppersbush_page)
+elif args.site == 'konigin':
+    df_src = create_src(args.urls_source, parse_konigin_page)
 else:
     raise ValueError("There're no parse function for this site")
 
