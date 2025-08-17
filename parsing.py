@@ -31,7 +31,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush, konigin, evelux. ')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush, konigin, evelux, franke, franke-dealer, elica. ')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -158,6 +158,69 @@ def parse_evelux_page(html_code: str) -> dict:
                 key = key.strip()
                 value = value.strip()
                 data[key] = value
+
+    return data
+
+def parse_franke_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='cmp-product-information-table__section-list__item'):
+        name_span = row.find('span', class_='cmp-product-information-table__section-list__item__name')
+        value_span = row.find('span', class_='cmp-product-information-table__section-list__item__value')
+        
+        if name_span and value_span:
+            key = name_span.find(text=True, recursive=False)
+            value = value_span.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
+
+    return data
+
+def parse_franke_dealer_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('tr'):
+        name_td = row.find('td', class_='name')
+        value_td = row.find('td', class_='value')
+        
+        if name_td and value_td:
+            key = name_td.find(text=True, recursive=False)
+            value = value_td.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
+
+    return data
+
+def parse_elica_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('div', class_='ty-product-feature'):
+        name_span = row.find('span', class_='ty-product-feature__label')
+        value_div = row.find('div', class_='ty-product-feature__value')
+        
+        if name_span and value_div:
+            key = name_span.find(text=True, recursive=False)
+            value = value_div.find(text=True, recursive=False)
+            if key and value:
+                key = key.strip().rstrip('.,;!?—:').split('\n')[0]
+                value = value.strip().rstrip('.,;!?—:').split('\n')[0]
+                data[key] = value
+            elif key:
+                checkbox = value_div.find('span', class_='ty-compare-checkbox')
+                title = checkbox.get('title')
+                if title == 'Y':
+                    value = "Да"
+                    data[key.rstrip('.,;!?—:').split('\n')[0]] = value
 
     return data
 
@@ -555,6 +618,12 @@ elif args.site == 'konigin':
     df_src = create_src(args.urls_source, parse_konigin_page)
 elif args.site == 'evelux':
     df_src = create_src(args.urls_source, parse_evelux_page)
+elif args.site == 'franke':
+    df_src = create_src(args.urls_source, parse_franke_page)
+elif args.site == 'franke_dealer':
+    df_src = create_src(args.urls_source, parse_franke_dealer_page)
+elif args.site == 'elica':
+    df_src = create_src(args.urls_source, parse_elica_page)
 else:
     raise ValueError("There're no parse function for this site")
 
