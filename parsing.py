@@ -31,7 +31,7 @@ parser.add_argument("start_row", type=int, help="Номер строки в exce
 parser.add_argument("append", type=str, help="Добавлять ли в конец дополнительные столбцы с незаписанными данными сайтов. Возможные значения: True, " \
 "False. Если False, то незаписанные данные будут сохранены в отдельный excel-файл с названием, начинающимся с 'missing'. Название характреристик в этом файле " \
 "будут приведены к синонимичным из 1С в соответствии с утверждённым словарём синонимов. ")
-parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush, konigin, evelux, franke, franke-dealer, elica. ')
+parser.add_argument("site", type=str, help='Название типа сайта для парсинга. Возможные значения: korting, housedorf, dedietrich, falmec, vzug, asco, kuppersbush, konigin, evelux, franke, franke-dealer, elica, smeg. ')
 parser.add_argument("urls_source", type=str, help='Файл со ссылками на карточки товаров. Порядок должен соответствовать расположению наименований ' \
 'номенклатуры в excel-файле, указанном как входной')
 parser.add_argument("input_path", type=str, help='Путь к входному excel-файлу')
@@ -193,6 +193,25 @@ def parse_franke_dealer_page(html_code: str) -> dict:
             key = name_td.find(text=True, recursive=False)
             value = value_td.find(text=True, recursive=False)
             if key and value:
+                key = key.strip()
+                value = value.strip()
+                data[key] = value
+
+    return data
+
+def parse_smeg_page(html_code: str) -> dict:
+    soup = BeautifulSoup(html_code, 'html.parser')
+    data = {}
+
+    # Проходим по всем div с классом characteristics__row
+    for row in soup.find_all('tr', class_='s-feature-column'):
+        name_td = row.find('td', class_='name')
+        value_td = row.find('td', class_='value')
+        
+        if name_td and value_td:
+            key = name_td.find(text=True, recursive=True)
+            value = value_td.find(text=True, recursive=True)
+            if key and value and "фид" not in key:
                 key = key.strip()
                 value = value.strip()
                 data[key] = value
@@ -624,6 +643,8 @@ elif args.site == 'franke_dealer':
     df_src = create_src(args.urls_source, parse_franke_dealer_page)
 elif args.site == 'elica':
     df_src = create_src(args.urls_source, parse_elica_page)
+elif args.site == 'smeg':
+    df_src = create_src(args.urls_source, parse_smeg_page)
 else:
     raise ValueError("There're no parse function for this site")
 
