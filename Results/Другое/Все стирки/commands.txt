@@ -1,0 +1,5 @@
+python parsing.py 3 False housedorf urls_housedorf.txt example.xlsx result_housedorf.xlsx 
+python parsing.py 4 False graude urls_graude.txt result_housedorf.xlsx result_graude.xlsx 
+python parsing.py 7 False history urls_history.txt result_graude.xlsx result_history.xlsx 
+python parsing.py 10 False korting urls_korting.txt result_history.xlsx result_korting.xlsx 
+python parsing.py 78 False smeg urls_smeg.txt result_korting.xlsx result_smeg.xlsx

@@ -1,0 +1,16 @@
+BLANCO - hausedorf, blanco-russia
+FRANKE - hausedorf, franke-dealer
+GRANFEST, Granfest Quarz, EWIGSTEIN, GRANFEST URBAN - granfest (не забыть в конце сопоставить цвета с названиями, т.к. они могут не совпадать)
+FASHUN - fashun
+Gerdamix - gerdamix (нет аналога словаря на сайте, придётся заполнять вручную, цвета не указаны)
+TOPZERO - topzerorus
+UKINOX - ukinox
+КИТАЙ - нет сайта
+Premial - mypremial
+INSINKERATOR - insinkerator-shop (по-идее можно считать как dedietrich-home)
+KITKRAKEN - нет сайта
+LONGRAN - longran
+RIVELATO - rivelato
+ГЕЙЗЕР - geizer-city
+MAKMART - makmart
+АКВАФОР - aquaphor
