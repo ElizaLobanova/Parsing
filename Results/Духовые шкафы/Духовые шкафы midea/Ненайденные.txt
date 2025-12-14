@@ -1,8 +1,0 @@
-5 - MO581DBRI-B
-10 - MO78100CGB
-13 - MO78100CGI
-15 - MO78101CGB (есть на midearussia)
-16 - MO78101CGW (есть на midearussia)
-18 - MO86000MGB (есть на midearussia)
-20 - MO96000MGB (есть на midearussia)
-21 - MO98270CGB

@@ -1,3 +1,0 @@
-python autoclicker_smeg.py
-python autoclicker_housedorf.py
-echo done

@@ -1,3 +1,0 @@
-python autoclicker_graude.py
-python autoclicker_housedorf.py
-echo done

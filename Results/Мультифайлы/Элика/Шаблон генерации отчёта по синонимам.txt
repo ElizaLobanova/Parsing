@@ -1,5 +1,0 @@
-python parsing.py 2 True housedorf urls_housedorf.txt example.xlsx result_housedorf.xlsx 
-python generate_syn_report.py housedorf syn_report_housedorf.xlsx
-python parsing.py 2 False elica urls_elica.txt result_housedorf.xlsx result_elica.xlsx
-python generate_syn_report.py elica syn_report_elica.xlsx
-echo done
