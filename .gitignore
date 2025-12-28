@@ -5,3 +5,4 @@
 /current_inputs
 /Results
 /*.parquet
+/RAG/rag_data
