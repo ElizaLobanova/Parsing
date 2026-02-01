@@ -6,3 +6,4 @@
 /Results
 /*.parquet
 /RAG/rag_data
+/RAG/Обучение/fast_fine_tuned_t5
